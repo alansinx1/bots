@@ -66,6 +66,7 @@ function withSendLock(botId, fn) {
 // ── Orquestación de la conversación ──────────────────────────────────────────
 
 async function handleIncoming(bot, payload) {
+  if (SETTINGS.paused) return; // freno de emergencia: no responder
   if (payload.fromMe) return; // ignora eco de mensajes propios
 
   const from = payload.from; // puede ser 52xxxx@c.us, xxxx@lid o xxxx@g.us
@@ -156,6 +157,7 @@ function pickTarget(bot) {
 }
 
 async function initiateFrom(bot) {
+  if (SETTINGS.paused) return; // freno de emergencia: no iniciar pláticas
   if (!everLinked.has(bot.id) || !bot.number) return; // debe estar vinculada
   const target = pickTarget(bot);
   if (!target) return;
@@ -276,6 +278,7 @@ app.get('/start/:botId', async (req, res) => {
 
 app.get('/seed', async (req, res) => {
   if (!guard(req, res)) return;
+  if (SETTINGS.paused) return res.status(423).send('En PAUSA (freno de emergencia). Pon PAUSED=false para reanudar.');
   const from = BOT_BY_ID.get(req.query.from);
   const to = BOT_BY_ID.get(req.query.to);
   const text = (req.query.text || '¡Hola! ¿cómo va tu día?').toString();
@@ -341,6 +344,7 @@ app.get('/', async (req, res) => {
     a{color:#2563eb}
   </style></head><body>
   <h1>🤖 WhatsApp AI Swarm</h1>
+  ${SETTINGS.paused ? '<p style="background:#fee2e2;color:#991b1b;padding:10px;border-radius:8px"><b>⏸ EN PAUSA</b> — no se envía ningún mensaje (freno de emergencia). Para reanudar: PAUSED=false en el entorno.</p>' : ''}
   <p>Estado de las cuentas. Escanea el QR de cada una desde el WhatsApp correspondiente
   (WhatsApp → Dispositivos vinculados → Vincular dispositivo). Esta página se
   refresca sola cada 8&nbsp;s.</p>
@@ -428,7 +432,9 @@ async function initSessions() {
   setInterval(() => maintainSessions().catch(() => {}), 15000);
 
   // Arranca la malla autónoma: cada cuenta inicia pláticas sola.
-  if (SETTINGS.initiate) {
+  if (SETTINGS.paused) {
+    console.log('⏸  EN PAUSA: no se envía nada. Pon PAUSED=false para reanudar.');
+  } else if (SETTINGS.initiate) {
     for (const bot of ACTIVE_BOTS) scheduleInitiator(bot, true);
     console.log('Malla autónoma activada (las cuentas inician pláticas solas).');
   }

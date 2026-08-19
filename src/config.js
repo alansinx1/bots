@@ -172,6 +172,11 @@ export const SETTINGS = {
   maxTurnsPerPair: parseInt(process.env.MAX_TURNS_PER_PAIR || '6', 10),
   cooldownMs: parseInt(process.env.COOLDOWN_MS || '3600000', 10),
 
+  // FRENO DE EMERGENCIA: si está en pausa, NO se envía nada (ni respuestas ni
+  // inicios). Por seguridad el valor por defecto es PAUSA. Para reanudar hay que
+  // poner explícitamente PAUSED=false en el entorno.
+  paused: (process.env.PAUSED || 'true') === 'true',
+
   // Malla autónoma: cada cuenta inicia sola pláticas con otra al azar.
   initiate: (process.env.INITIATE || 'true') === 'true',
   // Cada cuánto (aleatorio) una cuenta considera iniciar plática: 30 min – 3 h.
