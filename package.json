@@ -1,0 +1,21 @@
+{
+  "name": "waha-ai-swarm",
+  "version": "1.0.0",
+  "description": "Orquestador que conecta 10 cuentas de WhatsApp (vía WAHA) y las hace conversar entre sí con IA (Claude).",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "setup": "node scripts/setup-sessions.js",
+    "seed": "node scripts/seed.js",
+    "status": "node scripts/status.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
+    "axios": "^1.7.7",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

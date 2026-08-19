@@ -1,0 +1,23 @@
+# WAHA (2026.6.1+): un solo contenedor GRATIS maneja las 10 sesiones.
+# Ya no hace falta WAHA Plus ni un contenedor por número: la imagen pública
+# devlikeapro/waha incluye sesiones ilimitadas, multimedia y seguridad, gratis.
+#
+# En tu VPS:  docker compose -f waha/docker-compose.yml up -d
+services:
+  waha:
+    image: devlikeapro/waha:latest
+    container_name: waha
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    environment:
+      # Clave para proteger la API (debe coincidir con WAHA_API_KEY del orquestador).
+      - WAHA_API_KEY=cambia-esta-clave
+      # Motor sin navegador: mucho menos CPU/RAM -> ideal para 10 sesiones.
+      # NOWEB es maduro y estable. Alternativa moderna: GOWS.
+      - WHATSAPP_DEFAULT_ENGINE=NOWEB
+      # Persistencia de sesiones para no re-escanear QR al reiniciar.
+      - WHATSAPP_RESTART_ALL_SESSIONS=true
+    volumes:
+      - ./sessions:/app/.sessions
+      - ./media:/app/.media
