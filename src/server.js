@@ -118,13 +118,26 @@ async function handleIncoming(bot, payload) {
 
 // ── Webhook de WAHA ──────────────────────────────────────────────────────────
 
+// Guarda los últimos webhooks recibidos (diagnóstico).
+const lastHooks = [];
+function recordHook(botId, body) {
+  lastHooks.unshift({ botId, event: body?.event, payload: body?.payload });
+  if (lastHooks.length > 15) lastHooks.pop();
+}
+
 app.post('/webhook/:botId', (req, res) => {
   res.sendStatus(200);
   const bot = BOT_BY_ID.get(req.params.botId);
+  recordHook(req.params.botId, req.body);
   if (!bot) return;
   const { event, payload } = req.body || {};
   if (event !== 'message') return;
   handleIncoming(bot, payload).catch((e) => console.error(e));
+});
+
+app.get('/lasthooks', (req, res) => {
+  if (!guard(req, res)) return;
+  res.json({ count: lastHooks.length, hooks: lastHooks });
 });
 
 // ── Protección opcional del panel ────────────────────────────────────────────
