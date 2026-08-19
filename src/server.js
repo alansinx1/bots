@@ -19,6 +19,24 @@ app.use(express.json({ limit: '2mb' }));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const rand = (min, max) => Math.floor(min + Math.random() * (max - min));
 
+// Detecta el número real de cada cuenta vinculada (WAHA lo revela en me.id)
+// y mantiene actualizado el índice número -> bot.
+async function refreshNumbers() {
+  for (const bot of ACTIVE_BOTS) {
+    try {
+      const s = await getSession(bot);
+      const meId = s?.me?.id; // ej: "5217772159435@c.us"
+      if (s?.status === 'WORKING' && meId) {
+        const num = meId.split('@')[0].replace(/\D/g, '');
+        if (num) {
+          bot.number = num;
+          BOT_BY_NUMBER.set(num, bot);
+        }
+      }
+    } catch {}
+  }
+}
+
 // Serializa los envíos por cada bot para no mandar dos mensajes a la vez.
 const sendLocks = new Map();
 function withSendLock(botId, fn) {
@@ -136,8 +154,13 @@ app.get('/seed', async (req, res) => {
   const from = BOT_BY_ID.get(req.query.from);
   const to = BOT_BY_ID.get(req.query.to);
   const text = (req.query.text || '¡Hola! ¿cómo va tu día?').toString();
-  if (!from || !to || !to.number) {
-    return res.status(400).send('Parámetros inválidos (from, to y que "to" tenga número).');
+  if (!from || !to) {
+    return res.status(400).send('Parámetros inválidos: revisa "from" y "to".');
+  }
+  if (!to.number) {
+    return res
+      .status(400)
+      .send(`La cuenta destino "${to.id}" aún no está vinculada (WORKING). Escanea su QR primero.`);
   }
   try {
     await sendText(from, chatIdOf(to.number), text);
@@ -228,11 +251,23 @@ async function initSessions() {
   console.log(`Iniciando sesiones: ${ACTIVE_BOTS.map((b) => b.id).join(', ')}`);
   for (const bot of ACTIVE_BOTS) {
     try {
+      // No reinicies una cuenta ya vinculada (evita desvincularla en un redeploy).
+      let status = null;
+      try {
+        status = (await getSession(bot))?.status;
+      } catch {}
+      if (status === 'WORKING') {
+        console.log(`[${bot.id}] ya vinculada, se conserva.`);
+        continue;
+      }
       await startSession(bot);
     } catch (e) {
       console.error(`[${bot.id}] no se pudo iniciar:`, e?.response?.data?.message || e?.message);
     }
   }
+  await refreshNumbers();
+  // Revisa cada 15s si alguna cuenta ya se vinculó, para captar su número real.
+  setInterval(() => refreshNumbers().catch(() => {}), 15000);
 }
 
 app.listen(SETTINGS.port, () => {

@@ -134,9 +134,9 @@ export const BOTS = [
   },
 ];
 
-// Los números y baseUrl se pueden definir por variable de entorno (ideal para
-// Easypanel): NUM_ANA=52..., NUM_BETO=52...  (mayúsculas del id del bot).
-// Lo que venga por env tiene prioridad sobre lo escrito arriba.
+// baseUrl por defecto (sin barra final). El número NO se escribe a mano:
+// se detecta automáticamente de WhatsApp cuando la cuenta se vincula (ver
+// registry en server.js). Opcionalmente puedes fijarlo con NUM_ANA=52...
 for (const bot of BOTS) {
   const envNum = process.env['NUM_' + bot.id.toUpperCase()];
   if (envNum) bot.number = envNum;
@@ -144,9 +144,16 @@ for (const bot of BOTS) {
   bot.baseUrl = (bot.baseUrl || DEFAULT_WAHA_URL).replace(/\/+$/, '');
 }
 
-// Bots "activos" = los que ya tienen número. Así, para probar con 2 cuentas
-// basta con llenar el number de ana y beto; el resto se ignora.
-export const ACTIVE_BOTS = BOTS.filter((b) => b.number);
+// Qué bots correr: variable BOTS=ana,beto,caro,... (ids separados por coma).
+// Si no se define, usa los que tengan número fijado por NUM_*.
+const activeIds = (process.env.BOTS || '')
+  .split(',')
+  .map((s) => s.trim().toLowerCase())
+  .filter(Boolean);
+
+export const ACTIVE_BOTS = activeIds.length
+  ? BOTS.filter((b) => activeIds.includes(b.id))
+  : BOTS.filter((b) => b.number);
 
 export const SETTINGS = {
   wahaApiKey: process.env.WAHA_API_KEY || '',
@@ -170,7 +177,8 @@ export const SETTINGS = {
   dashboardToken: process.env.DASHBOARD_TOKEN || '',
 };
 
-// Índice número -> bot, para saber quién nos escribe.
-export const BOT_BY_NUMBER = new Map(BOTS.filter((b) => b.number).map((b) => [b.number, b]));
+// Índice número -> bot, para saber quién nos escribe. Se llena en runtime
+// (server.js) conforme cada cuenta se vincula y WAHA revela su número real.
+export const BOT_BY_NUMBER = new Map();
 export const BOT_BY_ID = new Map(BOTS.map((b) => [b.id, b]));
 export const BOT_BY_SESSION = new Map(BOTS.map((b) => [b.name, b]));
