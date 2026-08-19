@@ -58,6 +58,13 @@ export async function getSession(bot) {
   return r.data;
 }
 
+// Cierra sesión (limpia credenciales guardadas). Útil para recuperar una
+// sesión atascada en FAILED antes de volver a arrancarla.
+export async function logoutSession(bot) {
+  const http = clientFor(bot.baseUrl);
+  await http.post(`/api/sessions/${bot.name}/logout`).catch(() => {});
+}
+
 // Devuelve el QR como Buffer PNG (para escanear y vincular la cuenta).
 export async function getQrPng(bot) {
   const http = clientFor(bot.baseUrl);

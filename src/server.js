@@ -7,6 +7,7 @@ import {
   stopTyping,
   startSession,
   getSession,
+  logoutSession,
   getQrPng,
   chatIdOf,
 } from './gateway.js';
@@ -142,7 +143,16 @@ app.get('/start/:botId', async (req, res) => {
   const bot = BOT_BY_ID.get(req.params.botId);
   if (!bot) return res.sendStatus(404);
   try {
-    await startSession(bot);
+    // Si ya está vinculada, no la toques (evita desvincularla por accidente).
+    let status = null;
+    try {
+      status = (await getSession(bot))?.status;
+    } catch {}
+    if (status !== 'WORKING') {
+      // Limpieza + arranque: recupera sesiones atascadas en FAILED con QR nuevo.
+      await logoutSession(bot);
+      await startSession(bot);
+    }
   } catch (e) {
     console.error(`[${bot.id}] start:`, e?.response?.data || e?.message);
   }
@@ -180,11 +190,14 @@ app.get('/', async (req, res) => {
         const s = await getSession(bot);
         status = s.status || s.state || 'DESCONOCIDO';
       } catch {}
-      const working = status === 'WORKING';
-      const qr =
-        !working
-          ? `<div><img src="/qr/${bot.id}.png${tokenQS()}" alt="QR ${bot.id}" width="200" style="background:#fff;padding:6px;border-radius:8px"/><br/><small>Escanea con el WhatsApp de ${bot.persona.displayName}</small></div>`
-          : '<span style="color:#16a34a">✅ vinculada</span>';
+      let qr;
+      if (status === 'WORKING') {
+        qr = '<span style="color:#16a34a">✅ vinculada</span>';
+      } else if (status === 'SCAN_QR_CODE') {
+        qr = `<div><img src="/qr/${bot.id}.png${tokenQS()}" alt="QR ${bot.id}" width="200" style="background:#fff;padding:6px;border-radius:8px"/><br/><small>Escanea con el WhatsApp de ${bot.persona.displayName}</small></div>`;
+      } else {
+        qr = `<span style="color:#dc2626">⚠ ${status} — clic en "reiniciar sesión" para un QR nuevo</span>`;
+      }
       return `<tr>
         <td><b>${bot.persona.displayName}</b><br/><small>${bot.id}</small></td>
         <td>${bot.number || '(sin número)'}</td>
