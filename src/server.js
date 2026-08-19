@@ -24,6 +24,22 @@ const rand = (min, max) => Math.floor(min + Math.random() * (max - min));
 let runtimePaused = SETTINGS.paused;
 let initiatorsStarted = false;
 
+// ── Instrumentación para investigación (eventos + salud por cuenta) ──────────
+const events = []; // buffer en memoria de los últimos eventos
+function logEvent(type, botId, detail) {
+  const at = new Date().toISOString();
+  events.unshift({ at, type, botId, detail: detail || '' });
+  if (events.length > 300) events.pop();
+  console.log(`[EVENT ${type}] ${botId} ${detail || ''} @ ${at}`); // queda en logs de Easypanel
+}
+const health = new Map(); // botId -> métricas
+function hOf(id) {
+  if (!health.has(id)) {
+    health.set(id, { status: null, drops: 0, sendFails: 0, sentTotal: 0, lastChange: null });
+  }
+  return health.get(id);
+}
+
 // ── Calentamiento: horario humano + tope diario de envíos por cuenta ─────────
 function localHour() {
   return (((new Date().getUTCHours() + SETTINGS.tzOffset) % 24) + 24) % 24;
@@ -45,6 +61,7 @@ function recordSend(botId) {
   const rec = dailySends.get(botId);
   if (!rec || rec.day !== day) dailySends.set(botId, { day, count: 1 });
   else rec.count += 1;
+  hOf(botId).sentTotal += 1;
 }
 // ¿Puede enviar ahora este bot? (respeta modo calentamiento)
 function canSendNow(botId) {
@@ -65,6 +82,15 @@ async function maintainSessions() {
       const s = await getSession(bot);
       const status = s?.status;
       const meId = s?.me?.id; // ej: "5217772159435@c.us"
+
+      // Registra transiciones de estado (para investigar bloqueos).
+      const h = hOf(bot.id);
+      if (h.status !== status) {
+        if (h.status === 'WORKING' && status !== 'WORKING') h.drops += 1;
+        logEvent('status', bot.id, `${h.status || '?'} -> ${status}`);
+        h.status = status;
+        h.lastChange = new Date().toISOString();
+      }
 
       if (status === 'WORKING') {
         everLinked.add(bot.id);
@@ -164,7 +190,8 @@ async function handleIncoming(bot, payload) {
       recordSend(bot.id);
       console.log(`[${bot.id} -> ${senderBot?.id || replyNumber || senderKey}] ${reply}`);
     } catch (err) {
-      console.error(`[${bot.id}] error enviando:`, err?.response?.data || err?.message || err);
+      hOf(bot.id).sendFails += 1;
+      logEvent('sendfail', bot.id, `respuesta: ${err?.response?.data?.message || err?.message || err}`);
     }
   });
 }
@@ -229,7 +256,8 @@ async function initiateFrom(bot) {
       recordSend(bot.id);
       console.log(`[${bot.id} inicia -> ${target.id}] (tema: ${topic}) ${opener}`);
     } catch (err) {
-      console.error(`[${bot.id}] error iniciando:`, err?.response?.data || err?.message || err);
+      hOf(bot.id).sendFails += 1;
+      logEvent('sendfail', bot.id, `inicio: ${err?.response?.data?.message || err?.message || err}`);
     }
   });
 }
@@ -480,9 +508,27 @@ app.get('/health', (req, res) => {
     ok: true,
     paused: runtimePaused,
     warmup: SETTINGS.warmup,
-    activeBots: ACTIVE_BOTS.map((b) => ({ id: b.id, hoy: sendsToday(b.id) })),
+    warmupCap: SETTINGS.warmupMsgsPerDay,
+    activeBots: ACTIVE_BOTS.map((b) => {
+      const h = hOf(b.id);
+      return {
+        id: b.id,
+        status: h.status,
+        sentToday: sendsToday(b.id),
+        sentTotal: h.sentTotal,
+        drops: h.drops, // desconexiones desde WORKING
+        sendFails: h.sendFails, // fallos de envío (posible restricción)
+        lastChange: h.lastChange,
+      };
+    }),
     conversations: snapshot(),
   });
+});
+
+// Registro de eventos para investigación (transiciones de estado, fallos de envío).
+app.get('/events', (req, res) => {
+  if (!guard(req, res)) return;
+  res.json({ count: events.length, events });
 });
 
 // ── Arranque ─────────────────────────────────────────────────────────────────
