@@ -114,9 +114,11 @@ async function handleIncoming(bot, payload) {
   if (!reply) return;
 
   await withSendLock(bot.id, async () => {
-    const delay = rand(SETTINGS.delayMinMs, SETTINGS.delayMaxMs);
+    // Pausa larga callado (como quien está ocupado), y solo al final "escribiendo…"
+    // unos segundos antes de mandar. Más humano que mostrar typing 20 min.
+    await sleep(rand(SETTINGS.delayMinMs, SETTINGS.delayMaxMs));
     await startTyping(bot, chatId);
-    await sleep(delay);
+    await sleep(rand(2500, 7000));
     await stopTyping(bot, chatId);
     try {
       await sendText(bot, chatId, reply);
@@ -127,6 +129,80 @@ async function handleIncoming(bot, payload) {
       console.error(`[${bot.id}] error enviando:`, err?.response?.data || err?.message || err);
     }
   });
+}
+
+// ── Malla autónoma: cada cuenta inicia pláticas con otra al azar ──────────────
+
+// Genera un primer mensaje natural para arrancar plática.
+async function generateOpener(persona) {
+  return generateReply({
+    persona,
+    history: [
+      {
+        role: 'user',
+        text:
+          'Inicia tú una conversación casual por WhatsApp con un amigo: escribe UN solo ' +
+          'mensaje corto y natural (un saludo o una pregunta ligera). Solo el mensaje, sin comillas.',
+      },
+    ],
+  });
+}
+
+// Elige otra cuenta vinculada al azar como destino.
+function pickTarget(bot) {
+  const candidates = ACTIVE_BOTS.filter((b) => b.id !== bot.id && b.number && everLinked.has(b.id));
+  if (!candidates.length) return null;
+  return candidates[Math.floor(Math.random() * candidates.length)];
+}
+
+async function initiateFrom(bot) {
+  if (!everLinked.has(bot.id) || !bot.number) return; // debe estar vinculada
+  const target = pickTarget(bot);
+  if (!target) return;
+
+  const chatId = `${target.number}@c.us`;
+  const conv = getConversation(bot.id, chatId);
+  const now = Date.now();
+  // No arranques si esa pareja está en enfriamiento o ya tiene hilo activo.
+  if (conv.cooldownUntil > now) return;
+  if (conv.turns > 0) return;
+
+  let opener;
+  try {
+    opener = await generateOpener(bot.persona);
+  } catch (err) {
+    console.error(`[${bot.id}] error generando opener:`, err?.message || err);
+    return;
+  }
+  if (!opener) return;
+
+  await withSendLock(bot.id, async () => {
+    await startTyping(bot, chatId);
+    await sleep(rand(2500, 7000));
+    await stopTyping(bot, chatId);
+    try {
+      await sendText(bot, chatId, opener);
+      pushMessage(conv, 'assistant', opener);
+      conv.turns += 1;
+      console.log(`[${bot.id} inicia -> ${target.id}] ${opener}`);
+    } catch (err) {
+      console.error(`[${bot.id}] error iniciando:`, err?.response?.data || err?.message || err);
+    }
+  });
+}
+
+// Programa el siguiente intento de inicio de cada cuenta (intervalo aleatorio).
+function scheduleInitiator(bot, first = false) {
+  // El primer intento es pronto (1–5 min) para que arranque; luego se espacia.
+  const ms = first
+    ? rand(60000, 300000)
+    : rand(SETTINGS.initiateMinMs, SETTINGS.initiateMaxMs);
+  setTimeout(async () => {
+    try {
+      if (SETTINGS.initiate) await initiateFrom(bot);
+    } catch {}
+    scheduleInitiator(bot);
+  }, ms);
 }
 
 // ── Webhook de WAHA ──────────────────────────────────────────────────────────
@@ -283,8 +359,11 @@ app.get('/', async (req, res) => {
     </form>
     <small>Ambas deben estar <b>WORKING</b>. Después de esto se responden solas.</small>
   </div>
-  <p><small>Modelo: ${SETTINGS.geminiModel} · delay ${SETTINGS.delayMinMs}-${SETTINGS.delayMaxMs}ms ·
-  tope ${SETTINGS.maxTurnsPerPair} turnos/pareja</small></p>
+  <p><small>Modelo: ${SETTINGS.geminiModel} · pausa ${Math.round(SETTINGS.delayMinMs / 60000)}-${Math.round(
+    SETTINGS.delayMaxMs / 60000
+  )} min · tope ${SETTINGS.maxTurnsPerPair} turnos/pareja · malla ${
+    SETTINGS.initiate ? 'ON' : 'OFF'
+  }</small></p>
   <script>setTimeout(()=>location.reload(), 8000)</script>
   </body></html>`);
 });
@@ -347,6 +426,12 @@ async function initSessions() {
   await maintainSessions();
   // Cada 15s: capta números nuevos y reconecta cuentas caídas.
   setInterval(() => maintainSessions().catch(() => {}), 15000);
+
+  // Arranca la malla autónoma: cada cuenta inicia pláticas sola.
+  if (SETTINGS.initiate) {
+    for (const bot of ACTIVE_BOTS) scheduleInitiator(bot, true);
+    console.log('Malla autónoma activada (las cuentas inician pláticas solas).');
+  }
 }
 
 app.listen(SETTINGS.port, () => {

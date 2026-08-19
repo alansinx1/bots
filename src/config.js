@@ -166,10 +166,17 @@ export const SETTINGS = {
   geminiModel: process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite',
   aiMaxTokens: parseInt(process.env.AI_MAX_TOKENS || process.env.CLAUDE_MAX_TOKENS || '280', 10),
 
-  delayMinMs: parseInt(process.env.DELAY_MIN_MS || '30000', 10),
-  delayMaxMs: parseInt(process.env.DELAY_MAX_MS || '90000', 10),
+  // Pausa antes de responder (humano): por defecto 3–20 min. Súbelo para horas.
+  delayMinMs: parseInt(process.env.DELAY_MIN_MS || '180000', 10),
+  delayMaxMs: parseInt(process.env.DELAY_MAX_MS || '1200000', 10),
   maxTurnsPerPair: parseInt(process.env.MAX_TURNS_PER_PAIR || '6', 10),
-  cooldownMs: parseInt(process.env.COOLDOWN_MS || '1800000', 10),
+  cooldownMs: parseInt(process.env.COOLDOWN_MS || '3600000', 10),
+
+  // Malla autónoma: cada cuenta inicia sola pláticas con otra al azar.
+  initiate: (process.env.INITIATE || 'true') === 'true',
+  // Cada cuánto (aleatorio) una cuenta considera iniciar plática: 30 min – 3 h.
+  initiateMinMs: parseInt(process.env.INITIATE_MIN_MS || '1800000', 10),
+  initiateMaxMs: parseInt(process.env.INITIATE_MAX_MS || '10800000', 10),
 
   onlyAmongBots: (process.env.ONLY_AMONG_BOTS || 'true') === 'true',
   allowGroups: (process.env.ALLOW_GROUPS || 'false') === 'true',
