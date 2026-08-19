@@ -10,7 +10,6 @@
     "status": "node scripts/status.js"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.32.1",
     "axios": "^1.7.7",
     "dotenv": "^16.4.5",
     "express": "^4.21.1"

@@ -11,7 +11,7 @@ import {
   getQrPng,
   chatIdOf,
 } from './gateway.js';
-import { generateReply } from './claude.js';
+import { generateReply } from './ai.js';
 import { getConversation, pushMessage, snapshot } from './store.js';
 
 const app = express();
@@ -244,7 +244,7 @@ app.get('/', async (req, res) => {
     </form>
     <small>Ambas deben estar <b>WORKING</b>. Después de esto se responden solas.</small>
   </div>
-  <p><small>Modelo: ${SETTINGS.claudeModel} · delay ${SETTINGS.delayMinMs}-${SETTINGS.delayMaxMs}ms ·
+  <p><small>Modelo: ${SETTINGS.geminiModel} · delay ${SETTINGS.delayMinMs}-${SETTINGS.delayMaxMs}ms ·
   tope ${SETTINGS.maxTurnsPerPair} turnos/pareja</small></p>
   <script>setTimeout(()=>location.reload(), 8000)</script>
   </body></html>`);

@@ -1,12 +1,12 @@
 # WhatsApp AI Swarm — cuentas de WhatsApp que conversan entre sí con IA
 
 Orquestador que conecta varias cuentas de WhatsApp (vía **WAHA**) y las hace
-platicar entre ellas de forma natural usando **Claude**. Cada cuenta es un
+platicar entre ellas de forma natural usando **Gemini**. Cada cuenta es un
 "personaje" con su propia personalidad. Incluye un **panel web** para ver el
 estado, escanear los QR desde el navegador y encender la conversación.
 
 ```
-WhatsApp ↔ WAHA (Easypanel) ──webhook──▶ Orquestador (Easypanel) ──▶ Claude
+WhatsApp ↔ WAHA (Easypanel) ──webhook──▶ Orquestador (Easypanel) ──▶ Gemini
                             ◀──enviar────
 ```
 
@@ -66,8 +66,8 @@ WAHA_API_KEY=<tu-clave-de-waha>
 PUBLIC_URL=https://bots-orquestador.cakkmp.easypanel.host   # el dominio de ESTA app
 PORT=8080
 
-ANTHROPIC_API_KEY=sk-ant-...
-CLAUDE_MODEL=claude-haiku-4-5-20251001
+GEMINI_API_KEY=AIza...
+GEMINI_MODEL=gemini-2.5-flash-lite
 
 NUM_ANA=52xxxxxxxxxx
 NUM_BETO=52xxxxxxxxxx
@@ -148,7 +148,7 @@ túnel (`cloudflared tunnel --url http://localhost:8080`) y pon esa URL en
 ```
 src/config.js     -> bots (personalidades), números por env y ajustes
 src/gateway.js    -> cliente de WAHA (sesiones, QR, enviar, typing)
-src/claude.js     -> genera la respuesta con Claude
+src/ai.js         -> genera la respuesta con Gemini
 src/store.js      -> historial de conversación en memoria
 src/server.js     -> webhook + panel web + orquestación
 scripts/          -> versiones por línea de comandos (setup/seed/status)
