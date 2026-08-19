@@ -20,19 +20,32 @@ app.use(express.json({ limit: '2mb' }));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const rand = (min, max) => Math.floor(min + Math.random() * (max - min));
 
-// Detecta el número real de cada cuenta vinculada (WAHA lo revela en me.id)
-// y mantiene actualizado el índice número -> bot.
-async function refreshNumbers() {
+// Marca los bots que en algún momento sí se vincularon (para auto-reconectar
+// solo esos, sin tocar los que apenas esperan su primer QR).
+const everLinked = new Set();
+
+// Mantenimiento periódico: (1) detecta el número real de cada cuenta vinculada,
+// (2) reconecta sola cualquier cuenta ya vinculada que se haya caído.
+async function maintainSessions() {
   for (const bot of ACTIVE_BOTS) {
     try {
       const s = await getSession(bot);
+      const status = s?.status;
       const meId = s?.me?.id; // ej: "5217772159435@c.us"
-      if (s?.status === 'WORKING' && meId) {
-        const num = meId.split('@')[0].replace(/\D/g, '');
-        if (num) {
-          bot.number = num;
-          BOT_BY_NUMBER.set(num, bot);
+
+      if (status === 'WORKING') {
+        everLinked.add(bot.id);
+        if (meId) {
+          const num = meId.split('@')[0].replace(/\D/g, '');
+          if (num) {
+            bot.number = num;
+            BOT_BY_NUMBER.set(num, bot);
+          }
         }
+      } else if ((status === 'FAILED' || status === 'STOPPED') && everLinked.has(bot.id)) {
+        // Cuenta ya vinculada que se cayó: reconecta SIN logout (no re-escanear).
+        console.log(`[${bot.id}] caída (${status}) — reconectando...`);
+        await startSession(bot).catch(() => {});
       }
     } catch {}
   }
@@ -305,9 +318,9 @@ async function initSessions() {
       console.error(`[${bot.id}] no se pudo iniciar:`, e?.response?.data?.message || e?.message);
     }
   }
-  await refreshNumbers();
-  // Revisa cada 15s si alguna cuenta ya se vinculó, para captar su número real.
-  setInterval(() => refreshNumbers().catch(() => {}), 15000);
+  await maintainSessions();
+  // Cada 15s: capta números nuevos y reconecta cuentas caídas.
+  setInterval(() => maintainSessions().catch(() => {}), 15000);
 }
 
 app.listen(SETTINGS.port, () => {
