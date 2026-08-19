@@ -166,9 +166,9 @@ export const SETTINGS = {
   geminiModel: process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite',
   aiMaxTokens: parseInt(process.env.AI_MAX_TOKENS || process.env.CLAUDE_MAX_TOKENS || '280', 10),
 
-  delayMinMs: parseInt(process.env.DELAY_MIN_MS || '4000', 10),
-  delayMaxMs: parseInt(process.env.DELAY_MAX_MS || '12000', 10),
-  maxTurnsPerPair: parseInt(process.env.MAX_TURNS_PER_PAIR || '20', 10),
+  delayMinMs: parseInt(process.env.DELAY_MIN_MS || '30000', 10),
+  delayMaxMs: parseInt(process.env.DELAY_MAX_MS || '90000', 10),
+  maxTurnsPerPair: parseInt(process.env.MAX_TURNS_PER_PAIR || '6', 10),
   cooldownMs: parseInt(process.env.COOLDOWN_MS || '1800000', 10),
 
   onlyAmongBots: (process.env.ONLY_AMONG_BOTS || 'true') === 'true',
