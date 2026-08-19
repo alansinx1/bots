@@ -20,6 +20,39 @@ app.use(express.json({ limit: '2mb' }));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const rand = (min, max) => Math.floor(min + Math.random() * (max - min));
 
+// Estado de pausa en runtime (controlable con botón, sin redeploy).
+let runtimePaused = SETTINGS.paused;
+let initiatorsStarted = false;
+
+// ── Calentamiento: horario humano + tope diario de envíos por cuenta ─────────
+function localHour() {
+  return (((new Date().getUTCHours() + SETTINGS.tzOffset) % 24) + 24) % 24;
+}
+function localDayKey() {
+  return new Date(Date.now() + SETTINGS.tzOffset * 3600000).toISOString().slice(0, 10);
+}
+function withinActiveHours() {
+  const h = localHour();
+  return h >= SETTINGS.activeHourStart && h < SETTINGS.activeHourEnd;
+}
+const dailySends = new Map(); // botId -> { day, count }
+function sendsToday(botId) {
+  const rec = dailySends.get(botId);
+  return rec && rec.day === localDayKey() ? rec.count : 0;
+}
+function recordSend(botId) {
+  const day = localDayKey();
+  const rec = dailySends.get(botId);
+  if (!rec || rec.day !== day) dailySends.set(botId, { day, count: 1 });
+  else rec.count += 1;
+}
+// ¿Puede enviar ahora este bot? (respeta modo calentamiento)
+function canSendNow(botId) {
+  if (!SETTINGS.warmup) return true;
+  if (!withinActiveHours()) return false;
+  return sendsToday(botId) < SETTINGS.warmupMsgsPerDay;
+}
+
 // Marca los bots que en algún momento sí se vincularon (para auto-reconectar
 // solo esos, sin tocar los que apenas esperan su primer QR).
 const everLinked = new Set();
@@ -66,7 +99,7 @@ function withSendLock(botId, fn) {
 // ── Orquestación de la conversación ──────────────────────────────────────────
 
 async function handleIncoming(bot, payload) {
-  if (SETTINGS.paused) return; // freno de emergencia: no responder
+  if (runtimePaused) return; // freno de emergencia: no responder
   if (payload.fromMe) return; // ignora eco de mensajes propios
 
   const from = payload.from; // puede ser 52xxxx@c.us, xxxx@lid o xxxx@g.us
@@ -105,6 +138,9 @@ async function handleIncoming(bot, payload) {
 
   pushMessage(conv, 'user', text);
 
+  // Calentamiento: fuera de horario o pasado el tope diario, no respondemos.
+  if (!canSendNow(bot.id)) return;
+
   let reply;
   try {
     reply = await generateReply({ persona: bot.persona, history: conv.messages });
@@ -125,6 +161,7 @@ async function handleIncoming(bot, payload) {
       await sendText(bot, chatId, reply);
       pushMessage(conv, 'assistant', reply);
       conv.turns += 1;
+      recordSend(bot.id);
       console.log(`[${bot.id} -> ${senderBot?.id || replyNumber || senderKey}] ${reply}`);
     } catch (err) {
       console.error(`[${bot.id}] error enviando:`, err?.response?.data || err?.message || err);
@@ -157,7 +194,8 @@ function pickTarget(bot) {
 }
 
 async function initiateFrom(bot) {
-  if (SETTINGS.paused) return; // freno de emergencia: no iniciar pláticas
+  if (runtimePaused) return; // freno de emergencia: no iniciar pláticas
+  if (!canSendNow(bot.id)) return; // calentamiento: horario/tope diario
   if (!everLinked.has(bot.id) || !bot.number) return; // debe estar vinculada
   const target = pickTarget(bot);
   if (!target) return;
@@ -186,11 +224,20 @@ async function initiateFrom(bot) {
       await sendText(bot, chatId, opener);
       pushMessage(conv, 'assistant', opener);
       conv.turns += 1;
+      recordSend(bot.id);
       console.log(`[${bot.id} inicia -> ${target.id}] ${opener}`);
     } catch (err) {
       console.error(`[${bot.id}] error iniciando:`, err?.response?.data || err?.message || err);
     }
   });
+}
+
+// Arranca los iniciadores una sola vez (idempotente).
+function startInitiators() {
+  if (initiatorsStarted || !SETTINGS.initiate) return;
+  initiatorsStarted = true;
+  for (const bot of ACTIVE_BOTS) scheduleInitiator(bot, true);
+  console.log('Malla autónoma activada (las cuentas inician pláticas solas).');
 }
 
 // Programa el siguiente intento de inicio de cada cuenta (intervalo aleatorio).
@@ -278,7 +325,7 @@ app.get('/start/:botId', async (req, res) => {
 
 app.get('/seed', async (req, res) => {
   if (!guard(req, res)) return;
-  if (SETTINGS.paused) return res.status(423).send('En PAUSA (freno de emergencia). Pon PAUSED=false para reanudar.');
+  if (runtimePaused) return res.status(423).send('En PAUSA. Usa el botón Reanudar en el panel.');
   const from = BOT_BY_ID.get(req.query.from);
   const to = BOT_BY_ID.get(req.query.to);
   const text = (req.query.text || '¡Hola! ¿cómo va tu día?').toString();
@@ -344,7 +391,17 @@ app.get('/', async (req, res) => {
     a{color:#2563eb}
   </style></head><body>
   <h1>🤖 WhatsApp AI Swarm</h1>
-  ${SETTINGS.paused ? '<p style="background:#fee2e2;color:#991b1b;padding:10px;border-radius:8px"><b>⏸ EN PAUSA</b> — no se envía ningún mensaje (freno de emergencia). Para reanudar: PAUSED=false en el entorno.</p>' : ''}
+  <div class="card" style="display:flex;align-items:center;gap:12px;${
+    runtimePaused ? 'background:#fee2e2' : 'background:#dcfce7'
+  }">
+    <b>${runtimePaused ? '⏸ EN PAUSA — no se envía nada' : '▶ ACTIVO — enviando (con calentamiento)'}</b>
+    ${
+      runtimePaused
+        ? `<a href="/resume${tokenQS()}"><button style="background:#16a34a">Reanudar</button></a>`
+        : `<a href="/pause${tokenQS()}"><button style="background:#dc2626">Pausar</button></a>`
+    }
+    <small>Actívalo solo cuando las cuentas ya no estén restringidas.</small>
+  </div>
   <p>Estado de las cuentas. Escanea el QR de cada una desde el WhatsApp correspondiente
   (WhatsApp → Dispositivos vinculados → Vincular dispositivo). Esta página se
   refresca sola cada 8&nbsp;s.</p>
@@ -365,8 +422,10 @@ app.get('/', async (req, res) => {
   </div>
   <p><small>Modelo: ${SETTINGS.geminiModel} · pausa ${Math.round(SETTINGS.delayMinMs / 60000)}-${Math.round(
     SETTINGS.delayMaxMs / 60000
-  )} min · tope ${SETTINGS.maxTurnsPerPair} turnos/pareja · malla ${
-    SETTINGS.initiate ? 'ON' : 'OFF'
+  )} min · tope ${SETTINGS.maxTurnsPerPair} turnos/pareja · malla ${SETTINGS.initiate ? 'ON' : 'OFF'}${
+    SETTINGS.warmup
+      ? ` · 🔥 calentamiento: máx ${SETTINGS.warmupMsgsPerDay} msg/día por cuenta, ${SETTINGS.activeHourStart}:00–${SETTINGS.activeHourEnd}:00`
+      : ''
   }</small></p>
   <script>setTimeout(()=>location.reload(), 8000)</script>
   </body></html>`);
@@ -399,8 +458,29 @@ app.get('/diag', async (req, res) => {
   }
 });
 
+// Botones del panel: pausar / reanudar sin redeploy.
+app.get('/pause', (req, res) => {
+  if (!guard(req, res)) return;
+  runtimePaused = true;
+  console.log('⏸  Pausado desde el panel.');
+  res.redirect('/' + tokenQS());
+});
+app.get('/resume', (req, res) => {
+  if (!guard(req, res)) return;
+  runtimePaused = false;
+  startInitiators(); // por si arrancó en pausa
+  console.log('▶  Reanudado desde el panel.');
+  res.redirect('/' + tokenQS());
+});
+
 app.get('/health', (req, res) => {
-  res.json({ ok: true, activeBots: ACTIVE_BOTS.map((b) => b.id), conversations: snapshot() });
+  res.json({
+    ok: true,
+    paused: runtimePaused,
+    warmup: SETTINGS.warmup,
+    activeBots: ACTIVE_BOTS.map((b) => ({ id: b.id, hoy: sendsToday(b.id) })),
+    conversations: snapshot(),
+  });
 });
 
 // ── Arranque ─────────────────────────────────────────────────────────────────
@@ -431,12 +511,11 @@ async function initSessions() {
   // Cada 15s: capta números nuevos y reconecta cuentas caídas.
   setInterval(() => maintainSessions().catch(() => {}), 15000);
 
-  // Arranca la malla autónoma: cada cuenta inicia pláticas sola.
-  if (SETTINGS.paused) {
-    console.log('⏸  EN PAUSA: no se envía nada. Pon PAUSED=false para reanudar.');
-  } else if (SETTINGS.initiate) {
-    for (const bot of ACTIVE_BOTS) scheduleInitiator(bot, true);
-    console.log('Malla autónoma activada (las cuentas inician pláticas solas).');
+  // Arranca la malla autónoma (si no está en pausa).
+  if (runtimePaused) {
+    console.log('⏸  EN PAUSA: no se envía nada. Usa el botón Reanudar en el panel.');
+  } else {
+    startInitiators();
   }
 }
 

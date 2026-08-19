@@ -183,6 +183,17 @@ export const SETTINGS = {
   initiateMinMs: parseInt(process.env.INITIATE_MIN_MS || '1800000', 10),
   initiateMaxMs: parseInt(process.env.INITIATE_MAX_MS || '10800000', 10),
 
+  // ── Modo calentamiento (warm-up) ──────────────────────────────────────────
+  warmup: (process.env.WARMUP || 'true') === 'true',
+  // Tope de mensajes que ENVÍA cada cuenta por día. Súbelo a mano cada día:
+  // día 1: 3, día 2: 5, día 3: 8, día 4: 12, ... hasta un ritmo normal.
+  warmupMsgsPerDay: parseInt(process.env.WARMUP_MSGS_PER_DAY || '3', 10),
+  // Solo enviar en horario humano (hora local según TZ_OFFSET).
+  activeHourStart: parseInt(process.env.ACTIVE_HOUR_START || '10', 10),
+  activeHourEnd: parseInt(process.env.ACTIVE_HOUR_END || '21', 10),
+  // Offset horario respecto a UTC (México centro = -6).
+  tzOffset: parseInt(process.env.TZ_OFFSET || '-6', 10),
+
   onlyAmongBots: (process.env.ONLY_AMONG_BOTS || 'true') === 'true',
   allowGroups: (process.env.ALLOW_GROUPS || 'false') === 'true',
   historyLimit: parseInt(process.env.HISTORY_LIMIT || '12', 10),
