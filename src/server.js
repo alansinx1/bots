@@ -35,12 +35,15 @@ async function maintainSessions() {
 
       if (status === 'WORKING') {
         everLinked.add(bot.id);
-        if (meId) {
-          const num = meId.split('@')[0].replace(/\D/g, '');
-          if (num) {
-            bot.number = num;
-            BOT_BY_NUMBER.set(num, bot);
-          }
+        const num = (meId || '').split('@')[0].replace(/\D/g, '');
+        const lid = (s?.me?.lid || '').split('@')[0].replace(/\D/g, '');
+        if (num) {
+          bot.number = num;
+          BOT_BY_NUMBER.set(num, bot); // índice por número (@c.us)
+        }
+        if (lid) {
+          bot.lid = lid;
+          BOT_BY_NUMBER.set(lid, bot); // índice por LID (@lid) que usa WhatsApp
         }
       } else if ((status === 'FAILED' || status === 'STOPPED') && everLinked.has(bot.id)) {
         // Cuenta ya vinculada que se cayó: reconecta SIN logout (no re-escanear).
@@ -65,18 +68,28 @@ function withSendLock(botId, fn) {
 async function handleIncoming(bot, payload) {
   if (payload.fromMe) return; // ignora eco de mensajes propios
 
-  const chatId = payload.from;
-  if (!chatId) return;
+  const from = payload.from; // puede ser 52xxxx@c.us, xxxx@lid o xxxx@g.us
+  if (!from) return;
 
-  const isGroup = chatId.endsWith('@g.us');
+  const isGroup = from.endsWith('@g.us');
   if (isGroup && !SETTINGS.allowGroups) return;
 
   const text = (payload.body || '').trim();
   if (!text) return;
 
-  const senderNumber = chatId.split('@')[0];
-  const senderBot = BOT_BY_NUMBER.get(senderNumber);
+  // WhatsApp identifica al remitente por @c.us (número) o por @lid (LinkedID).
+  const senderKey = from.split('@')[0].replace(/\D/g, '');
+  const senderBot = BOT_BY_NUMBER.get(senderKey);
   if (SETTINGS.onlyAmongBots && !senderBot && !isGroup) return;
+
+  // A quién responder / clave de conversación: usa el número real cuando se pueda.
+  // Si llega @lid, saca el número de _data.key.remoteJidAlt o del bot conocido.
+  let replyNumber = senderBot?.number;
+  if (!replyNumber) {
+    const alt = payload?._data?.key?.remoteJidAlt || '';
+    if (alt.includes('@')) replyNumber = alt.split('@')[0].replace(/\D/g, '');
+  }
+  const chatId = replyNumber ? `${replyNumber}@c.us` : from;
 
   const conv = getConversation(bot.id, chatId);
 
@@ -109,7 +122,7 @@ async function handleIncoming(bot, payload) {
       await sendText(bot, chatId, reply);
       pushMessage(conv, 'assistant', reply);
       conv.turns += 1;
-      console.log(`[${bot.id} -> ${senderBot?.id || senderNumber}] ${reply}`);
+      console.log(`[${bot.id} -> ${senderBot?.id || replyNumber || senderKey}] ${reply}`);
     } catch (err) {
       console.error(`[${bot.id}] error enviando:`, err?.response?.data || err?.message || err);
     }
