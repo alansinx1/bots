@@ -250,6 +250,33 @@ app.get('/', async (req, res) => {
   </body></html>`);
 });
 
+// Diagnóstico: llama a Gemini y devuelve la respuesta cruda (para depurar).
+app.get('/diag', async (req, res) => {
+  if (!guard(req, res)) return;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${SETTINGS.geminiModel}:generateContent`;
+  try {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': SETTINGS.geminiApiKey },
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: 'Responde breve y amistoso en español.' }] },
+        contents: [{ role: 'user', parts: [{ text: 'Hola, dime algo corto.' }] }],
+        generationConfig: { maxOutputTokens: SETTINGS.aiMaxTokens, temperature: 0.9 },
+      }),
+    });
+    const body = await r.json().catch(() => ({}));
+    res.json({
+      httpStatus: r.status,
+      model: SETTINGS.geminiModel,
+      keyPresent: !!SETTINGS.geminiApiKey,
+      keyLen: (SETTINGS.geminiApiKey || '').length,
+      gemini: body,
+    });
+  } catch (e) {
+    res.json({ error: String(e?.message || e) });
+  }
+});
+
 app.get('/health', (req, res) => {
   res.json({ ok: true, activeBots: ACTIVE_BOTS.map((b) => b.id), conversations: snapshot() });
 });
