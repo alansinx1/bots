@@ -134,6 +134,31 @@ export const BOTS = [
   },
 ];
 
+// Temas para que cada conversación sea sobre algo distinto (más humano).
+// El que inicia elige uno al azar y arranca la plática sobre eso.
+export const TOPICS = [
+  'el clima de estos días',
+  'qué van a comer hoy',
+  'una serie o película que están viendo',
+  'el tráfico y cómo estuvo el camino',
+  'planes para el fin de semana',
+  'un antojo de comida',
+  'cómo les fue en el trabajo',
+  'música que están escuchando',
+  'el partido de fútbol',
+  'una anécdota chistosa del día',
+  'ganas de vacaciones',
+  'algo que compraron o quieren comprar',
+  'cómo amanecieron de ánimo',
+  'un lugar bonito para visitar',
+  'mascotas',
+  'el gym y hacer ejercicio',
+  'una receta nueva',
+  'chismecito ligero y sano',
+  'el cansancio de la semana',
+  'recomendaciones de restaurantes',
+];
+
 // baseUrl por defecto (sin barra final). El número NO se escribe a mano:
 // se detecta automáticamente de WhatsApp cuando la cuenta se vincula (ver
 // registry en server.js). Opcionalmente puedes fijarlo con NUM_ANA=52...

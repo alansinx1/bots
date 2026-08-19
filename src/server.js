@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
-import { ACTIVE_BOTS, BOT_BY_ID, BOT_BY_NUMBER, SETTINGS } from './config.js';
+import { ACTIVE_BOTS, BOT_BY_ID, BOT_BY_NUMBER, SETTINGS, TOPICS } from './config.js';
 import {
   sendText,
   startTyping,
@@ -171,16 +171,17 @@ async function handleIncoming(bot, payload) {
 
 // ── Malla autónoma: cada cuenta inicia pláticas con otra al azar ──────────────
 
-// Genera un primer mensaje natural para arrancar plática.
-async function generateOpener(persona) {
+// Genera un primer mensaje natural para arrancar plática sobre un tema.
+async function generateOpener(persona, topic) {
   return generateReply({
     persona,
     history: [
       {
         role: 'user',
         text:
-          'Inicia tú una conversación casual por WhatsApp con un amigo: escribe UN solo ' +
-          'mensaje corto y natural (un saludo o una pregunta ligera). Solo el mensaje, sin comillas.',
+          `Inicia tú una conversación casual por WhatsApp con un amigo sobre: "${topic}". ` +
+          'Escribe UN solo mensaje corto y natural (un saludo breve y algo del tema, o una ' +
+          'pregunta ligera). Solo el mensaje, sin comillas.',
       },
     ],
   });
@@ -207,9 +208,10 @@ async function initiateFrom(bot) {
   if (conv.cooldownUntil > now) return;
   if (conv.turns > 0) return;
 
+  const topic = TOPICS[Math.floor(Math.random() * TOPICS.length)];
   let opener;
   try {
-    opener = await generateOpener(bot.persona);
+    opener = await generateOpener(bot.persona, topic);
   } catch (err) {
     console.error(`[${bot.id}] error generando opener:`, err?.message || err);
     return;
@@ -225,7 +227,7 @@ async function initiateFrom(bot) {
       pushMessage(conv, 'assistant', opener);
       conv.turns += 1;
       recordSend(bot.id);
-      console.log(`[${bot.id} inicia -> ${target.id}] ${opener}`);
+      console.log(`[${bot.id} inicia -> ${target.id}] (tema: ${topic}) ${opener}`);
     } catch (err) {
       console.error(`[${bot.id}] error iniciando:`, err?.response?.data || err?.message || err);
     }
