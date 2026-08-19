@@ -160,9 +160,10 @@ export const SETTINGS = {
   publicUrl: process.env.PUBLIC_URL || 'http://localhost:8080',
   port: parseInt(process.env.PORT || '8080', 10),
 
-  // Gemini (motor de IA). El modelo más barato es gemini-2.5-flash-lite.
+  // Gemini (motor de IA). gemini-2.5-flash-lite ya no está disponible para
+  // cuentas nuevas; el más barato vigente es gemini-3.5-flash-lite.
   geminiApiKey: process.env.GEMINI_API_KEY || '',
-  geminiModel: process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite',
+  geminiModel: process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite',
   aiMaxTokens: parseInt(process.env.AI_MAX_TOKENS || process.env.CLAUDE_MAX_TOKENS || '280', 10),
 
   delayMinMs: parseInt(process.env.DELAY_MIN_MS || '4000', 10),
